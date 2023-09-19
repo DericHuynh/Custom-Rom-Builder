@@ -1,0 +1,170 @@
+Hi everyone, this is a short guide on how to flash a GSI on the A7 Lite (without TWRP).
+
+Its a nice little tablet for the price but it doesn't have a very powerful SOC and for me the One UI is barely usable on this device. The launcher and the whole system UI feel extremely laggy, but apps generally run fine.
+
+I tried phhusson's custom Android 12 GSI and the device was almost resurrected. Much much less UI lag and the battery life is the same as stock ROM. The only thing i found not working is MTP but i don't need it.
+
+Since i saw a couple users here asking about GSIs i decided to make a very simple guide.
+
+As always do this at your own risk. You may brick your device. You will void your warranty.
+
+Follow the guide only if you know what your are doing. Read each step carefully and avoid copy pasting stuff randomly.
+
+I won't go deep into details as i believe you should have some basic knowledge if you decide to do this.
+
+The procedure sould work for both T220 and T225 (i tested it on a T220).
+
+I did this on Windows using WSL for some of the steps.
+
+Sources​
+
+Thanks to @kkoo and @Brepro1 for the useful info
+
+- https://forum.xda-developers.com/t/...sing-odin-without-twrp-phh-lineageos.4114435/
+- https://forum.xda-developers.com/t/...r-img-and-flashing-our-modifications.4196625/
+
+Requirements​
+
+- Unlocked bootloader
+
+If you haven't done this already follow the steps in parts 1-2 from:
+
+forum.xda-developers.com
+[TUTORIAL] How To Unlock & Root Tab A7 Lite T220/T225, & Install LSPosed, Magisk, Mods
+While some of these instructions are copied from other sources, I combined all the different things I learned, because no one guide was sufficient, and all needed additional info, so I expanded it all to one place. Part I is partly from...
+forum.xda-developers.com forum.xda-developers.com
+
+- Latest official ROM
+
+I used T220XXU1AVE1 for EUX region
+
+samfw.com
+Samsung Galaxy Tab A7 Lite Firmware Download SM-T220 Free Download
+Samsung Galaxy Tab A7 Lite Firmware Download SM-T220 Free Download ⭐ Official and fast update ⭐ Max speed and free download ⭐ Best Samsung Galaxy website
+samfw.com samfw.com
+
+- Download your preferred GSI
+
+I used AOSP 12.1 v414 with gapps from phhusson
+
+github.com
+Releases · phhusson/treble_experimentations
+Notes about tinkering with Android Project Treble. Contribute to phhusson/treble_experimentations development by creating an account on GitHub.
+github.com
+
+- Clean vbmeta.img from Google
+
+https://dl.google.com/developers/android/qt/images/gsi/vbmeta.img
+
+Tools​
+
+- lz4
+
+github.com
+Releases · lz4/lz4
+Extremely Fast Compression algorithm. Contribute to lz4/lz4 development by creating an account on GitHub.
+github.com
+
+- simg2img
+
+forum.xda-developers.com
+[DEV][Tools] simg2img for Windows
+Hello, although I'm working in Linux (VM too) I rewrote the SIMG2IMG so far for Windows (PE32, x86) Usage: simg2img.exe -i -o Optional: -d for debugging messages, listing all chunks of the image...
+forum.xda-developers.com forum.xda-developers.com
+
+- lpunpack and lpmake
+
+forum.xda-developers.com
+[GUIDE] OTA Tools LPUnpack
+Please see this URL https://android.googlesource.com/platform/build.git/+/eec4a7cba4face3370acb6293ab357879920b467 and this for more information. Hi everyone. I'm surprised I havent seen a thread about ota tools yet and lpunpack. This zip file...
+forum.xda-developers.com forum.xda-developers.com
+
+- tar-md5-script-tool
+
+Use the attached tar-md5-script-tool.zip
+
+Steps​
+
+1. Extract official ROM files (BL, AP, CP, CSC)
+
+2. Extract AP .tar.md5
+
+3. Decompress the extracted super.img.lz4
+
+Code:
+lz4 -d super.img.lz4 super.img
+
+4. Convert the sparse super.img
+
+Code:
+simg2img super.img super.ext4.img
+
+5. Unpack super.ext4.img
+
+Code:
+lpunpack super.ext4.img
+
+I got 4 partitions in my image (should be the same for all T220/T225 ROMs):
+
+- odm.img
+- product.img
+- system.img
+- vendor.img
+
+6. Replace system.img with your GSI (rename it to system.img)
+
+7. Get the size of all partitions and the size of the original super.ext4.img (not the sparse super.img)
+
+Code:
+stat -c '%n %s' IMG_FILE.img
+
+8. Repack super.img
+
+Code:
+lpmake --metadata-size 65536 \
+--super-name super \
+--metadata-slots 2 \
+--device super:ORIGINAL_SUPER_IMG_SIZE \
+--group main:SUM_OF_ALL_PARTITIONS_SIZES \
+--partition odm:readonly:ODM_PARTITION_SIZE:main \
+--image odm=./odm.img \
+--partition product:readonly:PRODUCT_PARTITION_SIZE:main \
+--image product=./product.img \
+--partition system:readonly:SYSTEM_PARTITION_SIZE:main \
+--image system=./system.img \
+--partition vendor:readonly:VENDOR_PARTITION_SIZE:main \
+--image vendor=./vendor.img \
+--sparse \
+--output ./super_new.img
+
+Replace ORIGINAL_SUPER_IMG_SIZE, SUM_OF_ALL_PARTITIONS_SIZES, ODM_PARTITION_SIZE, PRODUCT_PARTITION_SIZE, SYSTEM_PARTITION_SIZE, VENDOR_PARTITION_SIZE with the values you obtained in step 7.
+
+Read lpmake docs for a more detailed expalation of the args used above:
+
+partition_tools - platform/system/extras - Git at Google
+
+9. Compress the repacked super_new.img
+
+Code:
+lz4 -B6 --content-size super_new.img super_new.img.lz4
+
+10. Compress the clean vmbeta.img
+
+Code:
+lz4 -B6 --content-size vbmeta.img vbmeta.img.lz4
+
+11. Extract tar-md5-script-tool.zip
+
+12. Put all the *.img.lz4 files extracted from AP .tar.gz in tar-md5-script-tool dir
+
+13. Replace super.img.lz4 and vbmeta.img.lz4 in tar-md5-script-tool dir with your repacked and compressed super_new.img.lz4 (rename it to super.img.lz4) and the clean compressed vbmeta.img.lz4
+
+14. Run batch.bat in tar-md5-script-tool dir
+
+You will find the new AP .tar.md5 in the temp-folder subdir
+
+15. Flash your custom AP .tar.md5 with Odin along with BL, CP, CSC from original ROM
+
+16. Reboot into recovery and do a factory reset
+
+17. Done
